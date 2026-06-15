@@ -4,7 +4,7 @@ import psycopg2.extras
 DB_CONFIG = {
     "dbname":   "sig_lahan",
     "user":     "postgres",
-    "password": "12345678sall",  
+    "password": "postgres",  
     "host":     "localhost",
     "port":     "5432"
 }

@@ -14,10 +14,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(layers.router,      tags=["Layers"])
-app.include_router(suitability.router, tags=["Suitability"])
-app.include_router(analyze.router,     tags=["Analyze"])
-app.include_router(rekomendasi.router, tags=["Rekomendasi"])
+app.include_router(layers.router,      prefix="/api", tags=["Layers"])
+app.include_router(suitability.router, prefix="/api", tags=["Suitability"])
+app.include_router(analyze.router,     prefix="/api", tags=["Analyze"])
+app.include_router(rekomendasi.router, prefix="/api", tags=["Rekomendasi"])
 
 
 @app.get("/", tags=["Root"])
