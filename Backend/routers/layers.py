@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from database import get_connection, LAYER_CONFIG
+from database import get_connection, release_connection, LAYER_CONFIG
 
 router = APIRouter()
 
@@ -62,4 +62,5 @@ def get_layer_geojson(nama_layer: str):
 
     finally:
         cur.close()
-        conn.close()
+        if conn:
+            release_connection(conn)

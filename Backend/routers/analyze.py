@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Any
-from database import get_connection
+from database import get_connection, release_connection
 import json
 
 router = APIRouter()
@@ -94,4 +94,5 @@ def analyze_polygon(body: AnalyzeRequest):
 
     finally:
         cur.close()
-        conn.close()
+        if conn:
+            release_connection(conn)

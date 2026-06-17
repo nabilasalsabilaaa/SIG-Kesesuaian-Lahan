@@ -18,6 +18,7 @@ const layerHujan = new L.LayerGroup();
 const layerLereng = new L.LayerGroup();
 const layerPolaRuang = new L.LayerGroup();
 const layerJambuMete = new L.LayerGroup().addTo(map); // Default langsung aktif di peta
+const layerRekomendasi = new L.LayerGroup();
 
 // Fungsi pembantu untuk memberikan warna dinamis pada layer Jambu Mete & Kesesuaian Lahan
 function getKesesuaianColor(kelas) {
@@ -33,7 +34,11 @@ function getKesesuaianColor(kelas) {
 
 // Fungsi pembantu untuk fetch dengan error handling
 function loadLayer(layerName, layerGroup, popupField, popupLabel) {
-    fetch(`${API_BASE_URL}/layer/${layerName}/geojson`)
+    const url = layerName === 'overlay-rekomendasi' 
+        ? `${API_BASE_URL}/overlay-rekomendasi` 
+        : `${API_BASE_URL}/layer/${layerName}/geojson`;
+
+    fetch(url)
         .then(res => {
             if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
             return res.json();
@@ -41,7 +46,8 @@ function loadLayer(layerName, layerGroup, popupField, popupLabel) {
         .then(data => {
             L.geoJSON(data, {
                 style: (feature) => ({
-                    fillColor: layerName === 'jambu_mete' ? getKesesuaianColor(feature.properties.suai_lahan || feature.properties.kelas) : '#2c3e50',
+                    fillColor: (layerName === 'jambu_mete' || layerName === 'overlay-rekomendasi') 
+                        ? getKesesuaianColor(feature.properties.suai_lahan || feature.properties.kelas_kesesuaian) : '#2c3e50',
                     weight: 1, 
                     color: '#fff', 
                     fillOpacity: layerName === 'jambu_mete' ? 0.6 : 0.1
@@ -74,6 +80,9 @@ loadLayer('kemiringan', layerLereng, 'kl', 'Kelas Lereng');
 // --- Layer 5: Pola Ruang ---
 loadLayer('pola_ruang', layerPolaRuang, 'namobj', 'Zona Pola Ruang');
 
+// --- Layer 6: Rekomendasi (Potensi Baru) ---
+loadLayer('overlay-rekomendasi', layerRekomendasi, 'zona_ruang', 'Rekomendasi di Zona');
+
 // 5. Membuat Kontrol Layer (Checkbox di pojok kanan atas)
 const baseMaps = {
     "OpenStreetMap": osm,
@@ -85,7 +94,8 @@ const overlayMaps = {
     "Batas Administrasi Wilayah": layerWilayah,
     "Data Curah Hujan": layerHujan,
     "Kemiringan Lereng": layerLereng,
-    "Pola Ruang (RTRW)": layerPolaRuang
+    "Pola Ruang (RTRW)": layerPolaRuang,
+    "Rekomendasi Perluasan ✨": layerRekomendasi
 };
 
 L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
@@ -112,14 +122,16 @@ map.on('pm:create', function(e) {
         return res.json();
     })
     .then(data => {
-        let popupText = `<h4>Hasil Analisis Luas Area:</h4>`;
+        let popupText = `<div style="min-width:200px;"><h4>Hasil Analisis Luas:</h4><hr>`;
         if (data.jambu_mete && data.jambu_mete.length > 0) {
             data.jambu_mete.forEach(item => {
-                popupText += `<b>Kelas ${item.kelas}:</b> ${item.luas_ha} Hektar<br>`;
+                const dotColor = getKesesuaianColor(item.kelas);
+                popupText += `<span style="color:${dotColor}; font-size:18px;">●</span> <b>${item.kelas}:</b> ${item.luas_ha} Ha<br>`;
             });
         } else {
             popupText += `<p style="color:red;">Tidak menemukan irisan lahan Jambu Mete di area ini.</p>`;
         }
+        popupText += `</div>`;
         layer.bindPopup(popupText).openPopup();
     })
     .catch(err => {
@@ -142,11 +154,19 @@ map.on('click', function(e) {
             return res.json();
         })
         .then(data => {
-            let info = `<h4>Identifikasi Lokasi:</h4>`;
-            // Tampilkan isi properti koordinat dari database response
-            info += `<p><b>Garis Lintang:</b> ${lat.toFixed(5)}<br><b>Garis Bujur:</b> ${lon.toFixed(5)}</p>`;
-            info += `<pre style="background:#f4f4f4; padding:5px; border-radius:3px; max-height:300px; overflow-y:auto;">${JSON.stringify(data, null, 2)}</pre>`;
-            
+            const d = data.data;
+            let info = `
+                <div style="min-width:200px;">
+                    <h4 style="margin-bottom:5px;">Info Lokasi</h4>
+                    <hr>
+                    <b>📍 Wilayah:</b> ${d.nama_wilayah}<br>
+                    <b>🌧️ Curah Hujan:</b> ${d.curah_hujan.nilai_mm} mm/thn<br>
+                    <b>⛰️ Kemiringan:</b> ${d.kemiringan}<br>
+                    <b>🏢 Pola Ruang:</b> ${d.zona_pola_ruang}<br>
+                    <b style="color:#1e824c">🌟 Jambu Mete:</b> ${d.kelas_jambu_mete}
+                </div>
+            `;
+
             L.popup()
                 .setLatLng(e.latlng)
                 .setContent(info)
@@ -165,12 +185,13 @@ map.on('click', function(e) {
 const legend = L.control({ position: 'bottomright' });
 legend.onAdd = function (map) {
     const div = L.DomUtil.create('div', 'info legend');
-    const grades = ['S1 (Sangat Sesuai)', 'S2 (Cukup Sesuai)', 'S3 (Sesuai Bersyarat)', 'TS (Tidak Sesuai)'];
+    const grades = ['S1', 'S2', 'S3', 'TS'];
+    const labels = ['Sangat Sesuai', 'Cukup Sesuai', 'Sesuai Bersyarat', 'Tidak Sesuai'];
     const colors = ['#1e824c', '#2cc5c6', '#f39c12', '#c0392b'];
 
-    div.innerHTML += '<strong>Legenda Kesesuaian Lahan</strong><br><br>';
+    div.innerHTML += '<b>Legenda Kesesuaian</b><br>';
     for (let i = 0; i < grades.length; i++) {
-        div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + grades[i] + '<br>';
+        div.innerHTML += `<i style="background:${colors[i]}; width:18px; height:18px; float:left; margin-right:8px; opacity:0.7;"></i> <b>${grades[i]}</b>: ${labels[i]}<br>`;
     }
     return div;
 };

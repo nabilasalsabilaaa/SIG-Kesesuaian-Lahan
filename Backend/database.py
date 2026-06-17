@@ -1,5 +1,6 @@
 import psycopg2
 import psycopg2.extras
+from psycopg2 import pool
 
 DB_CONFIG = {
     "dbname":   "sig_lahan",
@@ -9,8 +10,17 @@ DB_CONFIG = {
     "port":     "5432"
 }
 
+# Inisialisasi Connection Pool (Min 1, Max 10 koneksi)
+try:
+    db_pool = pool.SimpleConnectionPool(1, 10, **DB_CONFIG)
+except Exception as e:
+    print(f"Error creating connection pool: {e}")
+
 def get_connection():
-    return psycopg2.connect(**DB_CONFIG)
+    return db_pool.getconn()
+
+def release_connection(conn):
+    db_pool.putconn(conn)
 
 LAYER_CONFIG = {
     "wilayah": {

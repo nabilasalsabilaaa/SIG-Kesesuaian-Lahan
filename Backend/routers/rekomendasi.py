@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from database import get_connection, LAYER_CONFIG
+from database import get_connection, release_connection, LAYER_CONFIG
 
 router = APIRouter()
 
@@ -62,7 +62,8 @@ def get_overlay_rekomendasi():
         raise HTTPException(status_code=500, detail=f"Error di overlay-rekomendasi: {str(e)}")
     finally:
         cur.close()
-        conn.close()
+        if conn:
+            release_connection(conn)
 
 
 @router.get("/rekomendasi")
@@ -118,4 +119,5 @@ def get_rekomendasi():
         raise HTTPException(status_code=500, detail=f"Error di rekomendasi: {str(e)}")
     finally:
         cur.close()
-        conn.close()
+        if conn:
+            release_connection(conn)
