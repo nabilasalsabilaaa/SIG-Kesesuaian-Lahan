@@ -262,6 +262,4 @@ SIG-Kesesuaian-Lahan/
 
 ---
 
-## Kontribusi & Bug Report
 
-Jika ada error atau fitur yang ingin ditambahkan, bisa diskusi dengan tim. Selamat mengerjakan! 🚀
