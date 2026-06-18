@@ -16,7 +16,7 @@ body, html, #app-container {
     z-index: 1;
 }
 
-/* Sidebar Glassmorphism */
+/* Sidebar: Glass effect */
 .glass-maroon {
     width: 420px;
     height: 100vh;
@@ -33,7 +33,7 @@ body, html, #app-container {
     overflow-y: auto;
 }
 
-/* Custom Scrollbar for Sidebar */
+/* Sidebar scrollbar */
 .glass-maroon::-webkit-scrollbar {
     width: 6px;
 }
@@ -57,7 +57,7 @@ body, html, #app-container {
     margin-top: 20px;
 }
 
-/* Customizing Leaflet Controls for Glass Look */
+/* Leaflet controls styling */
 .leaflet-control-layers, 
 .info.legend {
     background: rgba(15, 0, 0, 0.9) !important;
@@ -67,7 +67,7 @@ body, html, #app-container {
     border-radius: 8px !important;
 }
 
-/* Point Popup: Red Black Glass */
+/* Popup styling */
 .leaflet-popup-content-wrapper {
     background: rgba(60, 0, 0, 0.9) !important;
     color: white !important;
@@ -79,7 +79,7 @@ body, html, #app-container {
     background: rgba(60, 0, 0, 0.9) !important;
 }
 
-/* Recommendation status classes */
+/* Status indicators */
 .status-box {
     padding: 15px;
     border-radius: 8px;

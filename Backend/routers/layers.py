@@ -6,7 +6,7 @@ router = APIRouter()
 
 @router.get("/layers")
 def get_layers():
-    """Mengembalikan daftar semua layer yang tersedia."""
+    """Return list of available layers."""
     result = {
         key: {"label": cfg["label"], "table": cfg["table"]}
         for key, cfg in LAYER_CONFIG.items()
@@ -16,7 +16,7 @@ def get_layers():
 
 @router.get("/layer/{nama_layer}/geojson")
 def get_layer_geojson(nama_layer: str):
-    """Mengembalikan seluruh data layer dalam format GeoJSON FeatureCollection."""
+    """Return entire layer data in GeoJSON FeatureCollection format."""
 
     if nama_layer not in LAYER_CONFIG:
         raise HTTPException(
@@ -27,7 +27,7 @@ def get_layer_geojson(nama_layer: str):
 
     table = LAYER_CONFIG[nama_layer]["table"]
     
-    # KOREKSI OTOMATIS: Menyesuaikan nama tabel kemiringan dengan yang ada di pgAdmin kamu
+    # Adjust table name if needed
     if table == "kemiringan":
         table = "kemiringan"
 
@@ -35,7 +35,7 @@ def get_layer_geojson(nama_layer: str):
     cur   = conn.cursor()
 
     try:
-        # Menggunakan query SQL bawaan PostGIS untuk mengubah baris tabel menjadi format GeoJSON resmi
+        # Build GeoJSON from database using PostGIS
         cur.execute(f"""
             SELECT json_build_object(
                 'type', 'FeatureCollection',
@@ -45,9 +45,9 @@ def get_layer_geojson(nama_layer: str):
                         'geometry',   ST_AsGeoJSON(
                             ST_SimplifyPreserveTopology(
                                 ST_MakeValid(wkb_geometry), 
-                                0.001 -- Tingkatkan toleransi (0.0001 -> 0.001) agar ukuran file GeoJSON jauh lebih ringan
+                                0.001
                             ), 
-                            6 -- Batasi presisi desimal koordinat menjadi 6 angka
+                            6
                         )::json,
                         'properties', to_jsonb(t) - 'wkb_geometry' - 'ogc_fid'
                     )

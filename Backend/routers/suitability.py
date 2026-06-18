@@ -6,19 +6,15 @@ router = APIRouter()
 
 @router.get("/suitability")
 def get_suitability(
-    lat: float = Query(..., description="Latitude titik yang diklik di peta"),
-    lon: float = Query(..., description="Longitude titik yang diklik di peta")
+    lat: float = Query(..., description="Latitude of clicked point"),
+    lon: float = Query(..., description="Longitude of clicked point")
 ):
-    """
-    Mengembalikan informasi lengkap untuk satu titik koordinat:
-    nama wilayah, curah hujan, kemiringan, pola ruang,
-    dan kelas kesesuaian jambu mete.
-    """
+    """Return suitability information for a coordinate: region, rainfall, slope, zoning, and land suitability."""
 
     conn = get_connection()
     cur  = conn.cursor()
 
-    # Fungsi pembantu untuk mengecek data spasial berdasarkan titik koordinat
+    # Query point data from spatial layer
     def query_point(table: str, col: str) -> str:
         try:
             cur.execute(f"""
@@ -36,13 +32,13 @@ def get_suitability(
                 return "TS" if val == "N" else val
             return "Tidak ada data"
         except Exception:
-            # Jika ada tabel yang bermasalah/belum ada di database (seperti kesesuaian_lahan)
+            # Skip if table has issues
             return "Tidak tersedia"
 
     try:
         cfg = LAYER_CONFIG
         
-        # Ekstraksi informasi dari tiap layer spasial
+        # Extract information from spatial layers
         data = {
             "koordinat": {"lat": lat, "lon": lon},
             "nama_wilayah": query_point(
@@ -67,10 +63,10 @@ def get_suitability(
                 cfg["pola_ruang"]["table"], 
                 cfg["pola_ruang"]["col_zona"]
             ),
-            "kelas_kesesuaian": "Belum Dianalisis (File Kosong)", # Menghindari crash karena file kosong
+            "kelas_kesesuaian": "Belum Dianalisis (File Kosong)",
             
             "kelas_jambu_mete": query_point(
-                cfg["jambu_mete"]["table"],   # Menggunakan key config 'jambu_mete'
+                cfg["jambu_mete"]["table"],
                 cfg["jambu_mete"]["col_kelas"]
             ),
         }

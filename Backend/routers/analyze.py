@@ -10,6 +10,7 @@ import os
 import tempfile
 import zipfile
 import geopandas as gpd
+from shapely.geometry import shape
 
 router = APIRouter()
 
@@ -18,11 +19,7 @@ class AnalyzeRequest(BaseModel):
 
 @router.post("/analyze")
 def analyze_polygon(body: AnalyzeRequest):
-    """
-    Menerima polygon GeoJSON dari Leaflet,
-    menghitung luas (hektar) per kelas kesesuaian lahan
-    dan per kelas jambu mete dalam area yang digambar user.
-    """
+    """Analisis poligon GeoJSON: hitung luas per kelas kesesuaian lahan dan jambu mete."""
 
     geojson_str = json.dumps(body.polygon)
     conn = get_connection()
@@ -31,13 +28,13 @@ def analyze_polygon(body: AnalyzeRequest):
     rows_kesesuaian = []
     rows_mete = []
     luas_rekomendasi = 0.0
-    rows_mete_rekomendasi = [] # New variable for class distribution in recommended area
+    rows_mete_rekomendasi = []
     rekomendasi_geojson = None
     kriteria_summary = {}
     cfg = LAYER_CONFIG
 
     try:
-        # --- QUERY 1: KESESUAIAN LAHAN (Dengan proteksi jika tabel belum ada)
+        # Query 1: Kesesuaian Lahan
         try:
             cur.execute("""
                 SELECT
@@ -62,8 +59,7 @@ def analyze_polygon(body: AnalyzeRequest):
             """, (geojson_str, geojson_str))
             rows_kesesuaian = cur.fetchall()
         except Exception:
-            # Jika tabel kesesuaian_lahan belum ada/kosong di pgAdmin, 
-            # bypass error agar aplikasi tidak crash dan kembalikan array kosong
+            # Skip jika tabel tidak ada
             conn.rollback() 
             rows_kesesuaian = []
 
@@ -317,7 +313,7 @@ def export_analysis_shp(body: AnalyzeRequest):
 
         # Convert ke GeoPandas
         gdf = gpd.GeoDataFrame({'id': range(len(geoms_to_export)), 'keterangan': description}, 
-                               geometry=gpd.GeoSeries.from_iter([gpd.base.shape(g) for g in geoms_to_export]), 
+                               geometry=gpd.GeoSeries([shape(g) for g in geoms_to_export]), 
                                crs="EPSG:4326")
 
         # Simpan ke folder temporary dan Zip
@@ -333,6 +329,8 @@ def export_analysis_shp(body: AnalyzeRequest):
             return FileResponse(zip_path, media_type="application/zip", filename="rekomendasi_optimal_shp.zip")
 
     except Exception as e:
+        import traceback
+        traceback.print_exc() # Cetak traceback lengkap ke konsol backend
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur: cur.close()

@@ -5,10 +5,7 @@ router = APIRouter()
 
 @router.get("/overlay-rekomendasi")
 def get_overlay_rekomendasi():
-    """
-    Menampilkan area kesesuaian S1/S2 jambu mete yang TIDAK berada
-    di zona pertanian (rekomendasi perluasan lahan ke zona potensial lain).
-    """
+    """Display S1/S2 suitability areas outside agricultural zones (expansion recommendation)."""
     conn = get_connection()
     cur  = conn.cursor()
 
@@ -16,7 +13,7 @@ def get_overlay_rekomendasi():
     kelas_jambu_col = LAYER_CONFIG["jambu_mete"]["col_kelas"]
 
     try:
-        # Menggunakan ST_CollectionExtract(..., 3) untuk memaksa hasil irisan hanya berupa Polygon/MultiPolygon
+        # Extract and build GeoJSON from intersection
         cur.execute(f"""
             SELECT json_build_object(
                 'type', 'FeatureCollection',
@@ -74,24 +71,17 @@ def get_overlay_rekomendasi():
 
 @router.get("/rekomendasi")
 def get_rekomendasi():
-    """
-    Rekomendasi lokasi terbaik perluasan lahan berdasarkan irisan:
-    - Curah hujan sedang–tinggi
-    - Kemiringan < 15%
-    - Pola ruang mendukung pertanian
-    - Kesesuaian lahan minimal “Sesuai” (S1/S2)
-    Hasilnya dikelompokkan per desa beserta luas rekomendasi (hektar).
-    """
+    """Recommend best expansion locations based on: rainfall, slope, zoning, and suitability."""
     conn = get_connection()
     cur  = conn.cursor()
 
     cfg = LAYER_CONFIG
-    # Nama tabel kemiringan disesuaikan dengan yang ada di database (kemiringan)
+    # Slope table configuration
     table_lereng = cfg['kemiringan']['table']
     col_lereng   = cfg['kemiringan']['col_kelas']
 
     try:
-        # Melakukan spatial join antara 5 layer untuk mendapatkan area yang benar-benar optimal
+        # Spatial join across 5 layers for optimal areas
         cur.execute(f"""
             SELECT
                 w.{cfg['wilayah']['col_nama']}   AS nama_desa,
@@ -127,13 +117,13 @@ def get_rekomendasi():
             JOIN {cfg['pola_ruang']['table']} pr
                 ON ST_Intersects(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(pr.wkb_geometry))
             WHERE
-                -- Filter Kesesuaian Minimal Sesuai (S1/S2)
+                -- Suitability: S1/S2
                 (jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%S1%' OR jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%S2%')
-                -- Filter Curah Hujan Sedang-Tinggi
+                -- Rainfall: Moderate-High
                 AND (ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%Sedang%' OR ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%Tinggi%')
-                -- Filter Kemiringan < 15% (Asumsi kelas kl berisi string rentang seperti '0-8' atau '8-15')
+                -- Slope: < 15%
                 AND (k.{col_lereng} ILIKE '%0-8%' OR k.{col_lereng} ILIKE '%8-15%')
-                -- Filter Pola Ruang mendukung pertanian
+                -- Zoning: Agriculture/Plantation
                 AND (pr.{cfg['pola_ruang']['col_zona']} ILIKE '%Pertanian%' OR pr.{cfg['pola_ruang']['col_zona']} ILIKE '%Perkebunan%')
             GROUP BY w.{cfg['wilayah']['col_nama']}
             ORDER BY luas_rekomendasi_ha DESC;

@@ -1,6 +1,6 @@
 const API_BASE_URL = "http://127.0.0.1:5000/api";
 
-// Add sidebar CSS dynamically
+// --- UI Enhancement: Tambahkan CSS untuk Sidebar secara dinamis ---
 const style = document.createElement('style');
 style.innerHTML = `
     .glass-maroon {
@@ -8,7 +8,6 @@ style.innerHTML = `
                     padding 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
                     opacity 0.3s ease;
         overflow-x: hidden;
-        overflow-y: auto;
     }
     .sidebar-collapsed {
         width: 0 !important;
@@ -37,10 +36,10 @@ style.innerHTML = `
 `;
 document.head.appendChild(style);
 
-// Initialize map centered on South Sulawesi
+// 1. Inisialisasi Peta (Set center otomatis ke koordinat Sulawesi Selatan / Wilayah Kerja)
 const map = L.map('map').setView([-5.14, 119.48], 10);
 
-// Add base maps (OSM and Satellite)
+// 2. Tambahkan Peta Dasar (Basemap)
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
@@ -49,27 +48,29 @@ const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/servi
     attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
 });
 
-// Initialize layer groups
+// 3. Siapkan Layer Groups (Tempat menampung data spasial dari backend)
 const layerWilayah = new L.LayerGroup();
-const layerHujan = new L.LayerGroup();
-const layerLereng = new L.LayerGroup();
-const layerPolaRuang = new L.LayerGroup();
-const layerJambuMete = new L.LayerGroup().addTo(map);
+const layerHujan = new L.LayerGroup(); // Tidak langsung addTo(map)
+const layerLereng = new L.LayerGroup(); // Tidak langsung addTo(map)
+const layerPolaRuang = new L.LayerGroup(); // Tidak langsung addTo(map)
+const layerJambuMete = new L.LayerGroup().addTo(map); // Default langsung aktif di peta
 
-// Color suitability classes dynamically
+// Fungsi pembantu untuk memberikan warna dinamis pada layer Jambu Mete & Kesesuaian Lahan
 function getKesesuaianColor(kelas) {
     if (!kelas) return '#7f8c8d';
     let val = kelas.toString().toUpperCase();
     if (val === 'N') val = 'TS';
     val = val.toLowerCase();
     
-    if (val.includes('s1') || val.includes('sangat sesuai')) return '#1e824c';
-    if (val.includes('s2') || val.includes('cukup sesuai')) return '#2cc5c6';
-    if (val.includes('s3') || val.includes('sesuai bersyarat')) return '#f39c12';
-    return '#e74c3c';
+    if (val.includes('s1') || val.includes('sangat sesuai')) return '#1e824c'; // Green
+    if (val.includes('s2') || val.includes('cukup sesuai')) return '#2cc5c6';  // Light Green/Teal
+    if (val.includes('s3') || val.includes('sesuai bersyarat')) return '#f39c12'; // Yellow/Orange
+    return '#e74c3c'; // Red (TS)
 }
 
-// Fetch and load data from backend API
+// 4. Fetch dan Load Data dari Backend API untuk Masing-masing Layer
+
+// Fungsi pembantu untuk fetch dengan error handling
 function loadLayer(layerName, layerGroup, popupField, popupLabel) {
     const url = layerName === 'overlay-rekomendasi' 
         ? `${API_BASE_URL}/overlay-rekomendasi` 
@@ -283,10 +284,6 @@ function updateSidebarUI(data, drawnGeoJSON, layer) {
             ${isRecommended ? '✓ REKOMENDASI OPTIMAL' : '✗ TIDAK DIREKOMENDASIKAN'}<br>
             <span style="font-size:1.2rem;">${data.rekomendasi_optimal_ha} Ha</span>
         </div>
-        <div class="export-container">
-            <button class="btn-export" onclick="downloadCSV('${JSON.stringify(drawnGeoJSON.geometry).replace(/"/g, '&quot;')}')">Ekspor CSV</button>
-            <button class="btn-export" onclick="downloadSHP('${JSON.stringify(drawnGeoJSON.geometry).replace(/"/g, '&quot;')}')">Ekspor SHP</button>
-        </div>
         
         <h4>Ringkasan Kriteria:</h4>
         <table class="analysis-table">
@@ -309,6 +306,11 @@ function updateSidebarUI(data, drawnGeoJSON, layer) {
         <h4>Perbandingan Kelas Kesesuaian:</h4>
         <div style="height: 250px; margin-bottom: 20px;">
             <canvas id="sidebarChart"></canvas>
+        </div>
+        
+        <div class="export-container">
+            <button class="btn-export" onclick="downloadCSV('${JSON.stringify(drawnGeoJSON.geometry).replace(/"/g, '&quot;')}')">Ekspor CSV</button>
+            <button class="btn-export" onclick="downloadSHP('${JSON.stringify(drawnGeoJSON.geometry).replace(/"/g, '&quot;')}')">Ekspor SHP</button>
         </div>
     `;
 
@@ -427,9 +429,9 @@ window.downloadSHP = function(geom) {
         const a = document.createElement('a');
         a.href = url;
         a.download = "rekomendasi_optimal.zip";
-        document.body.appendChild(a);
+        document.body.appendChild(a); // Tambahkan elemen 'a' ke DOM
         a.click();
-        a.remove();
+        a.remove(); // Hapus elemen 'a' setelah diklik
     })
     .catch(err => alert("Gagal mengunduh Shapefile: " + err.message));
 };
