@@ -256,10 +256,8 @@ SIG-Kesesuaian-Lahan/
 ## Teknologi yang Digunakan
 
 - **Backend:** FastAPI (Python), PostgreSQL + PostGIS
-- **Frontend:** Leaflet.js (peta), Geoman (drawing tools), vanilla JavaScript
+- **Frontend:** Leaflet.js (peta), Geoman (drawing tools), Chart.js (statistik), vanilla JavaScript
 - **Database:** PostgreSQL 18 dengan extensi PostGIS 3.x
 - **Data Format:** GeoJSON untuk pertukaran data spasial
 
 ---
-
-

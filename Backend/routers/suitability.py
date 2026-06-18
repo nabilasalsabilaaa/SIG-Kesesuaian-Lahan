@@ -31,7 +31,10 @@ def get_suitability(
                 LIMIT 1;
             """, (lon, lat))
             row = cur.fetchone()
-            return str(row[0]) if row and row[0] is not None else "Tidak ada data"
+            if row and row[0] is not None:
+                val = str(row[0]).strip().upper()
+                return "TS" if val == "N" else val
+            return "Tidak ada data"
         except Exception:
             # Jika ada tabel yang bermasalah/belum ada di database (seperti kesesuaian_lahan)
             return "Tidak tersedia"
@@ -57,7 +60,7 @@ def get_suitability(
                 )
             },
             "kemiringan": query_point(
-                "kemiringan_lereng",  # Disesuaikan langsung dengan nama tabel asli di pgAdmin kamu
+            cfg["kemiringan"]["table"],
                 cfg["kemiringan"]["col_kelas"]
             ),
             "zona_pola_ruang": query_point(

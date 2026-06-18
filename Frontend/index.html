@@ -3,38 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web GIS Kesesuaian Lahan - Jambu Mete</title>
+    <title>SIG Kesesuaian Lahan Jambu Mete</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
-    
-    <style>
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        #map { width: 100vw; height: 100vh; }
-        
-        /* Tambahan styling untuk Legenda */
-        .info.legend {
-            background: white;
-            padding: 10px;
-            line-height: 18px;
-            color: #333;
-            border-radius: 5px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-        }
-        .info.legend i {
-            width: 18px;
-            height: 18px;
-            float: left;
-            margin-right: 8px;
-            opacity: 0.7;
-        }
-    </style>
+    <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
-    <div id="map"></div>
+    <div id="app-container">
+        <!-- Map Area (Left Side) -->
+        <div id="map"></div>
+
+        <!-- Sidebar Area (Right Side) -->
+        <aside id="sidebar" class="glass-maroon">
+            <div class="sidebar-header">
+                <h2>Dashboard Analisis</h2>
+                <p>SIG Kesesuaian Lahan Jambu Mete</p>
+            </div>
+
+            <div id="analysis-section" class="sidebar-content">
+                <h3><i class="icon-chart"></i> Hasil Analisis Area</h3>
+                <div id="analysis-placeholder">Silakan gambar poligon pada peta untuk memulai analisis.</div>
+                <div id="analysis-result-content" style="display: none;">
+                    <!-- Content injected by JS -->
+                </div>
+            </div>
+        </aside>
+    </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
+    <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="js/map.js"></script>
 </body>
 </html>

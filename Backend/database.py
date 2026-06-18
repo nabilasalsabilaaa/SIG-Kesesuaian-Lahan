@@ -5,7 +5,7 @@ from psycopg2 import pool
 DB_CONFIG = {
     "dbname":   "sig_lahan",
     "user":     "postgres",
-    "password": "postgres",  
+    "password": "12345678sall",  
     "host":     "localhost",
     "port":     "5432"
 }

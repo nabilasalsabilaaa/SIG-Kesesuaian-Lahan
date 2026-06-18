@@ -42,7 +42,13 @@ def get_layer_geojson(nama_layer: str):
                 'features', COALESCE(json_agg(
                     json_build_object(
                         'type',       'Feature',
-                        'geometry',   ST_AsGeoJSON(wkb_geometry)::json,
+                        'geometry',   ST_AsGeoJSON(
+                            ST_SimplifyPreserveTopology(
+                                ST_MakeValid(wkb_geometry), 
+                                0.001 -- Tingkatkan toleransi (0.0001 -> 0.001) agar ukuran file GeoJSON jauh lebih ringan
+                            ), 
+                            6 -- Batasi presisi desimal koordinat menjadi 6 angka
+                        )::json,
                         'properties', to_jsonb(t) - 'wkb_geometry' - 'ogc_fid'
                     )
                 ), '[]'::json)

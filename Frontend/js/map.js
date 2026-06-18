@@ -14,20 +14,22 @@ const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/servi
 
 // 3. Siapkan Layer Groups (Tempat menampung data spasial dari backend)
 const layerWilayah = new L.LayerGroup();
-const layerHujan = new L.LayerGroup();
-const layerLereng = new L.LayerGroup();
-const layerPolaRuang = new L.LayerGroup();
+const layerHujan = new L.LayerGroup(); // Tidak langsung addTo(map)
+const layerLereng = new L.LayerGroup(); // Tidak langsung addTo(map)
+const layerPolaRuang = new L.LayerGroup(); // Tidak langsung addTo(map)
 const layerJambuMete = new L.LayerGroup().addTo(map); // Default langsung aktif di peta
-const layerRekomendasi = new L.LayerGroup();
 
 // Fungsi pembantu untuk memberikan warna dinamis pada layer Jambu Mete & Kesesuaian Lahan
 function getKesesuaianColor(kelas) {
     if (!kelas) return '#7f8c8d';
-    let val = kelas.toLowerCase();
+    let val = kelas.toString().toUpperCase();
+    if (val === 'N') val = 'TS';
+    val = val.toLowerCase();
+    
     if (val.includes('s1') || val.includes('sangat sesuai')) return '#1e824c'; // Green
     if (val.includes('s2') || val.includes('cukup sesuai')) return '#2cc5c6';  // Light Green/Teal
     if (val.includes('s3') || val.includes('sesuai bersyarat')) return '#f39c12'; // Yellow/Orange
-    return '#c0392b'; // Red (Tidak Sesuai / TS)
+    return '#e74c3c'; // Red (TS)
 }
 
 // 4. Fetch dan Load Data dari Backend API untuk Masing-masing Layer
@@ -45,17 +47,14 @@ function loadLayer(layerName, layerGroup, popupField, popupLabel) {
         })
         .then(data => {
             L.geoJSON(data, {
+                pmIgnore: true, // Mencegah layer database dihapus oleh user
                 style: (feature) => ({
-                    fillColor: (layerName === 'jambu_mete' || layerName === 'overlay-rekomendasi') 
+                    fillColor: (layerName === 'jambu_mete') 
                         ? getKesesuaianColor(feature.properties.suai_lahan || feature.properties.kelas_kesesuaian) : '#2c3e50',
                     weight: 1, 
                     color: '#fff', 
-                    fillOpacity: layerName === 'jambu_mete' ? 0.6 : 0.1
-                }),
-                onEachFeature: (feature, layer) => {
-                    const popup = `<b>${popupLabel}:</b> ${feature.properties[popupField] || 'Tidak Diketahui'}`;
-                    layer.bindPopup(popup);
-                }
+                    fillOpacity: (layerName === 'jambu_mete') ? 0.6 : 0.1
+                })
             }).addTo(layerGroup);
             console.log(`✓ Layer ${layerName} berhasil dimuat`);
         })
@@ -68,20 +67,21 @@ function loadLayer(layerName, layerGroup, popupField, popupLabel) {
 // --- Layer 1: Jambu Mete ---
 loadLayer('jambu_mete', layerJambuMete, 'suai_lahan', 'Kesesuaian Jambu Mete');
 
-// --- Layer 2: Administrasi Wilayah ---
-loadLayer('wilayah', layerWilayah, 'wadmkc', 'Desa/Kelurahan');
-
-// --- Layer 3: Curah Hujan ---
-loadLayer('curah_hujan', layerHujan, 'ch', 'Curah Hujan (mm/tahun)');
-
-// --- Layer 4: Kemiringan Lereng ---
-loadLayer('kemiringan', layerLereng, 'kl', 'Kelas Lereng');
-
-// --- Layer 5: Pola Ruang ---
-loadLayer('pola_ruang', layerPolaRuang, 'namobj', 'Zona Pola Ruang');
-
-// --- Layer 6: Rekomendasi (Potensi Baru) ---
-loadLayer('overlay-rekomendasi', layerRekomendasi, 'zona_ruang', 'Rekomendasi di Zona');
+// Optimasi: Muat layer lain hanya saat checkbox dicentang (Lazy Loading) agar load awal lebih cepat
+map.on('overlayadd', function(e) {
+    if (e.name === "Batas Administrasi Wilayah" && layerWilayah.getLayers().length === 0) {
+        loadLayer('wilayah', layerWilayah, 'wadmkc', 'Desa/Kelurahan');
+    }
+    if (e.name === "Data Curah Hujan" && layerHujan.getLayers().length === 0) {
+        loadLayer('curah_hujan', layerHujan, 'ch', 'Curah Hujan');
+    }
+    if (e.name === "Kemiringan Lereng" && layerLereng.getLayers().length === 0) {
+        loadLayer('kemiringan', layerLereng, 'kl', 'Kelas Lereng');
+    }
+    if (e.name === "Pola Ruang (RTRW)" && layerPolaRuang.getLayers().length === 0) {
+        loadLayer('pola_ruang', layerPolaRuang, 'namobj', 'Zona Pola Ruang');
+    }
+});
 
 // 5. Membuat Kontrol Layer (Checkbox di pojok kanan atas)
 const baseMaps = {
@@ -90,27 +90,36 @@ const baseMaps = {
 };
 
 const overlayMaps = {
-    "Kesesuaian Jambu Mete 🌟": layerJambuMete,
+    "Kesesuaian Jambu Mete": layerJambuMete,
     "Batas Administrasi Wilayah": layerWilayah,
     "Data Curah Hujan": layerHujan,
     "Kemiringan Lereng": layerLereng,
-    "Pola Ruang (RTRW)": layerPolaRuang,
-    "Rekomendasi Perluasan ✨": layerRekomendasi
+    "Pola Ruang (RTRW)": layerPolaRuang
 };
 
-L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
+L.control.layers(baseMaps, overlayMaps, { collapsed: false, position: 'topleft' }).addTo(map);
 
 // 6. Integrasi Geoman (Alat Gambar Poligon untuk Endpoint /analyze)
 map.pm.addControls({
     position: 'topleft',
     drawMarker: false, drawPolyline: false, drawRectangle: false, drawCircle: false, drawCircleMarker: false,
-    cutPolygon: false, editMode: false, removalMode: true
+    cutPolygon: false, editMode: true, removalMode: true
 });
 
 map.on('pm:create', function(e) {
     const layer = e.layer;
     const drawnGeoJSON = layer.toGeoJSON();
-
+    
+    // Tampilkan loading di sidebar
+    const resultContent = document.getElementById('analysis-result-content');
+    const placeholder = document.getElementById('analysis-placeholder');
+    
+    if (placeholder) placeholder.style.display = 'none';
+    if (resultContent) {
+        resultContent.style.display = 'block';
+        resultContent.innerHTML = '<p style="text-align:center;">Menganalisis area...</p>';
+    }
+    
     // Kirim data bentuk geometri ke POST /api/analyze di FastAPI
     fetch(`${API_BASE_URL}/analyze`, {
         method: 'POST',
@@ -122,28 +131,206 @@ map.on('pm:create', function(e) {
         return res.json();
     })
     .then(data => {
-        let popupText = `<div style="min-width:200px;"><h4>Hasil Analisis Luas:</h4><hr>`;
-        if (data.jambu_mete && data.jambu_mete.length > 0) {
-            data.jambu_mete.forEach(item => {
-                const dotColor = getKesesuaianColor(item.kelas);
-                popupText += `<span style="color:${dotColor}; font-size:18px;">●</span> <b>${item.kelas}:</b> ${item.luas_ha} Ha<br>`;
-            });
-        } else {
-            popupText += `<p style="color:red;">Tidak menemukan irisan lahan Jambu Mete di area ini.</p>`;
-        }
-        popupText += `</div>`;
-        layer.bindPopup(popupText).openPopup();
+        updateSidebarUI(data, drawnGeoJSON, layer);
     })
     .catch(err => {
         console.error("✗ Gagal memproses analisis spasial:", err);
-        alert(`Error: ${err.message}\n\nPastikan backend berjalan di http://127.0.0.1:5000`);
+        resultContent.innerHTML = `<p style="color:red;">Gagal menganalisis area: ${err.message}</p>`;
     });
 });
 
+// Fungsi Baru: Update Sidebar daripada Popup
+function updateSidebarUI(data, drawnGeoJSON, layer) {
+    const resultContent = document.getElementById('analysis-result-content');
+    
+    // Calculate total area for drawn polygon
+    const totalDrawnArea = data.jambu_mete.reduce((sum, item) => sum + item.luas_ha, 0);
+    // Calculate total area for recommended polygon
+    const totalRecommendedArea = data.jambu_mete_rekomendasi.reduce((sum, item) => sum + item.luas_ha, 0);
+
+    // Prepare data for bar chart
+    const allClasses = [...new Set([
+        ...data.jambu_mete.map(item => item.kelas === 'N' ? 'TS' : item.kelas),
+        ...data.jambu_mete_rekomendasi.map(item => item.kelas === 'N' ? 'TS' : item.kelas)
+    ])].sort(); // Get unique sorted classes
+
+    const drawnAreaPercentages = allClasses.map(cls => {
+        const item = data.jambu_mete.find(i => (i.kelas === 'N' ? 'TS' : i.kelas) === cls);
+        return totalDrawnArea > 0 ? ((item ? item.luas_ha : 0) / totalDrawnArea * 100).toFixed(2) : 0;
+    });
+
+    const recommendedAreaPercentages = allClasses.map(cls => {
+        const item = data.jambu_mete_rekomendasi.find(i => (i.kelas === 'N' ? 'TS' : i.kelas) === cls);
+        return totalRecommendedArea > 0 ? ((item ? item.luas_ha : 0) / totalRecommendedArea * 100).toFixed(2) : 0;
+    });
+
+    const isRecommended = data.rekomendasi_optimal_ha > 0;
+    
+    // Update warna poligon di peta
+    layer.setStyle({ 
+        color: isRecommended ? '#2ecc71' : '#e74c3c', 
+        fillColor: isRecommended ? '#2ecc71' : '#e74c3c' 
+    });
+
+    let html = `
+        <div class="status-box ${isRecommended ? 'status-ok' : 'status-fail'}">
+            ${isRecommended ? '✓ REKOMENDASI OPTIMAL' : '✗ TIDAK DIREKOMENDASIKAN'}<br>
+            <span style="font-size:1.2rem;">${data.rekomendasi_optimal_ha} Ha</span>
+        </div>
+        
+        <h4>Ringkasan Kriteria:</h4>
+        <table class="analysis-table">
+            <thead>
+                <tr><th>Kriteria</th><th>Syarat</th><th>Data</th><th>Status</th></tr>
+            </thead>
+            <tbody>`;
+    
+    Object.values(data.kriteria_summary).forEach(item => {
+        let displayActual = item.actual === 'N' ? 'TS' : item.actual;
+        html += `<tr>
+            <td>${item.label}</td>
+            <td>${item.requirement}</td>
+            <td>${displayActual}</td>
+            <td>${item.status ? '✅' : '❌'}</td>
+        </tr>`;
+    });
+    
+    html += `</tbody></table>
+        <h4>Perbandingan Kelas Kesesuaian:</h4>
+        <div style="height: 250px; margin-bottom: 20px;">
+            <canvas id="sidebarChart"></canvas>
+        </div>
+        
+        <div class="export-container">
+            <button class="btn-export" onclick="downloadCSV('${JSON.stringify(drawnGeoJSON.geometry).replace(/"/g, '&quot;')}')">Ekspor CSV</button>
+            <button class="btn-export" onclick="downloadSHP('${JSON.stringify(drawnGeoJSON.geometry).replace(/"/g, '&quot;')}')">Ekspor SHP</button>
+        </div>
+    `;
+
+    resultContent.innerHTML = html;
+
+        if (data.rekomendasi_geojson) {
+            if (window.currentRecommendationLayer) map.removeLayer(window.currentRecommendationLayer);
+            window.currentRecommendationLayer = L.geoJSON(data.rekomendasi_geojson, {
+                style: { color: "#64ffda", weight: 3, fillOpacity: 0.4, dashArray: '5, 5' },
+                interactive: false
+            }).addTo(map);
+        }
+
+        // Only render chart if there's data
+
+    // Inisialisasi Chart di Sidebar
+    if (allClasses.length > 0) {
+        const ctx = document.getElementById('sidebarChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar', // Changed to bar chart
+            data: {
+                labels: allClasses,
+                datasets: [
+                    {
+                        label: 'Area Digambar (%)',
+                        data: drawnAreaPercentages,
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)', // Greenish-blue
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Area Rekomendasi (%)',
+                        data: recommendedAreaPercentages,
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)', // Reddish
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: { 
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            color: 'white',
+                            font: { size: 10 }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y + '%';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                } 
+            }
+        });
+    }
+}
+
+// Logika Hapus: Bersihkan layer analisis saat poligon dihapus
+map.on('pm:remove', function(e) {
+    if (window.currentRecommendationLayer) {
+        map.removeLayer(window.currentRecommendationLayer);
+        window.currentRecommendationLayer = null;
+    }
+    document.getElementById('analysis-result-content').style.display = 'none';
+    document.getElementById('analysis-placeholder').style.display = 'block';
+});
+
+// Fungsi Global untuk Download CSV
+window.downloadCSV = function(geom) {
+    const geojson = JSON.parse(geom);
+    fetch(`${API_BASE_URL}/analyze/csv`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ polygon: geojson })
+    })
+    .then(res => res.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "hasil_analisis_lahan.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    })
+    .catch(err => alert("Gagal mengunduh CSV: " + err.message));
+};
+
+// Fungsi Global untuk Download Shapefile
+window.downloadSHP = function(geom) {
+    const geojson = JSON.parse(geom);
+    fetch(`${API_BASE_URL}/analyze/shapefile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ polygon: geojson })
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Tidak ada area rekomendasi untuk diekspor atau error server.");
+        return res.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "rekomendasi_optimal.zip";
+        a.click();
+    })
+    .catch(err => alert("Gagal mengunduh Shapefile: " + err.message));
+};
+
 // 7. Klik Bebas Pada Peta untuk Mengetahui Detail Titik Spesifik (/api/suitability)
 map.on('click', function(e) {
-    // Lewati jika user mengklik bagian menu Geoman kontrol
-    if (e.originalEvent.target.closest('.leaflet-pm-toolbar')) return;
+    // Abaikan klik jika sedang dalam mode menggambar poligon
+    if (map.pm.Draw.getActiveShape()) return;
 
     const lat = e.latlng.lat;
     const lon = e.latlng.lng;
@@ -155,36 +342,37 @@ map.on('click', function(e) {
         })
         .then(data => {
             const d = data.data;
+            // Clear any existing recommendation layer when clicking a point
+            if (window.currentRecommendationLayer) {
+                map.removeLayer(window.currentRecommendationLayer);
+                window.currentRecommendationLayer = null;
+            }
             let info = `
                 <div style="min-width:200px;">
-                    <h4 style="margin-bottom:5px;">Info Lokasi</h4>
-                    <hr>
-                    <b>📍 Wilayah:</b> ${d.nama_wilayah}<br>
-                    <b>🌧️ Curah Hujan:</b> ${d.curah_hujan.nilai_mm} mm/thn<br>
-                    <b>⛰️ Kemiringan:</b> ${d.kemiringan}<br>
-                    <b>🏢 Pola Ruang:</b> ${d.zona_pola_ruang}<br>
-                    <b style="color:#1e824c">🌟 Jambu Mete:</b> ${d.kelas_jambu_mete}
-                </div>
-            `;
-
-            L.popup()
-                .setLatLng(e.latlng)
-                .setContent(info)
-                .openOn(map);
+                    <b>Info Lokasi</b><hr>
+                    <table style="width:100%; font-size:11px; border-collapse:collapse;">
+                        ${generateInfoRow('Wilayah', d.nama_wilayah)}
+                        ${generateInfoRow('Curah Hujan', d.curah_hujan.kelas)}
+                        ${generateInfoRow('Kemiringan', d.kemiringan)}
+                        ${generateInfoRow('Pola Ruang', d.zona_pola_ruang)}
+                        ${generateInfoRow('Kesesuaian', `<span style="color:${getKesesuaianColor(d.kelas_jambu_mete)}; font-weight:bold;">${d.kelas_jambu_mete}</span>`)}
+                    </table>
+                </div>`;
+            
+            L.popup().setLatLng(e.latlng).setContent(info).openOn(map);
         })
         .catch(err => {
             console.error("✗ Error fetching suitability point:", err);
-            L.popup()
-                .setLatLng(e.latlng)
-                .setContent(`<p style="color:red;"><b>Error:</b> ${err.message}</p>`)
-                .openOn(map);
+            L.popup().setLatLng(e.latlng).setContent("Gagal mengambil info lokasi.").openOn(map);
         });
 });
 
 // 8. Menambahkan Legenda Statis di Pojok Kanan Bawah
-const legend = L.control({ position: 'bottomright' });
+const legend = L.control({ position: 'bottomleft' });
 legend.onAdd = function (map) {
     const div = L.DomUtil.create('div', 'info legend');
+    div.style.padding = '8px';
+    div.style.border = 'none';
     const grades = ['S1', 'S2', 'S3', 'TS'];
     const labels = ['Sangat Sesuai', 'Cukup Sesuai', 'Sesuai Bersyarat', 'Tidak Sesuai'];
     const colors = ['#1e824c', '#2cc5c6', '#f39c12', '#c0392b'];
@@ -196,3 +384,8 @@ legend.onAdd = function (map) {
     return div;
 };
 legend.addTo(map);
+
+// Helper function for generating table rows
+function generateInfoRow(label, value) {
+    return `<tr style="border-bottom:1px solid #eee;"><td style="padding:4px 0;">${label}</td><td style="text-align:right;">${value}</td></tr>`;
+}
