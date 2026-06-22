@@ -22,7 +22,7 @@ def get_overlay_rekomendasi():
                         'type',     'Feature',
                         'geometry', ST_AsGeoJSON(
                             ST_CollectionExtract(
-                                ST_Intersection(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(pr.wkb_geometry)),
+                                ST_Intersection(jm.wkb_geometry, pr.wkb_geometry),
                                 3
                             )
                         )::json,
@@ -33,7 +33,7 @@ def get_overlay_rekomendasi():
                                 CAST(
                                     ST_Area(
                                         ST_CollectionExtract(
-                                            ST_Intersection(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(pr.wkb_geometry)),
+                                            ST_Intersection(jm.wkb_geometry, pr.wkb_geometry),
                                             3
                                         )::geography
                                     ) / 10000
@@ -46,7 +46,7 @@ def get_overlay_rekomendasi():
             )
             FROM {LAYER_CONFIG["jambu_mete"]["table"]} jm
             JOIN {LAYER_CONFIG["pola_ruang"]["table"]} pr
-                ON ST_Intersects(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(pr.wkb_geometry))
+                ON ST_Intersects(jm.wkb_geometry, pr.wkb_geometry)
             WHERE
                 (jm.{kelas_jambu_col} ILIKE '%S1%' OR jm.{kelas_jambu_col} ILIKE '%S2%' OR jm.{kelas_jambu_col} ILIKE '%Sesuai%')
                 AND pr.{zona_ruang_col} NOT IN (
@@ -56,7 +56,7 @@ def get_overlay_rekomendasi():
                     'Perkebunan'
                 )
                 AND NOT ST_IsEmpty(
-                    ST_CollectionExtract(ST_Intersection(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(pr.wkb_geometry)), 3)
+                    ST_CollectionExtract(ST_Intersection(jm.wkb_geometry, pr.wkb_geometry), 3)
                 );
         """)
         result = cur.fetchone()[0]
@@ -92,14 +92,14 @@ def get_rekomendasi():
                                 ST_Intersection(
                                     ST_Intersection(
                                         ST_Intersection(
-                                            ST_MakeValid(jm.wkb_geometry), 
-                                            ST_MakeValid(w.wkb_geometry)
+                                            jm.wkb_geometry, 
+                                            w.wkb_geometry
                                         ),
-                                        ST_MakeValid(pr.wkb_geometry)
+                                        pr.wkb_geometry
                                     ),
                                     ST_Intersection(
-                                        ST_MakeValid(ch.wkb_geometry),
-                                        ST_MakeValid(k.wkb_geometry)
+                                        ch.wkb_geometry,
+                                        k.wkb_geometry
                                     )
                                 ),
                                 3
@@ -109,20 +109,20 @@ def get_rekomendasi():
                 ) AS luas_rekomendasi_ha
             FROM {cfg['jambu_mete']['table']} jm
             JOIN {cfg['wilayah']['table']} w
-                ON ST_Intersects(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(w.wkb_geometry))
+                ON ST_Intersects(jm.wkb_geometry, w.wkb_geometry)
             JOIN {cfg['curah_hujan']['table']} ch
-                ON ST_Intersects(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(ch.wkb_geometry))
+                ON ST_Intersects(jm.wkb_geometry, ch.wkb_geometry)
             JOIN {table_lereng} k
-                ON ST_Intersects(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(k.wkb_geometry))
+                ON ST_Intersects(jm.wkb_geometry, k.wkb_geometry)
             JOIN {cfg['pola_ruang']['table']} pr
-                ON ST_Intersects(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(pr.wkb_geometry))
+                ON ST_Intersects(jm.wkb_geometry, pr.wkb_geometry)
             WHERE
                 -- Suitability: S1/S2
                 (jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%S1%' OR jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%S2%')
-                -- Rainfall: Moderate-High
-                AND (ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%Sedang%' OR ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%Tinggi%')
-                -- Slope: < 15%
-                AND (k.{col_lereng} ILIKE '%0-8%' OR k.{col_lereng} ILIKE '%8-15%')
+                -- Rainfall: Moderate-High (represented as ranges in database)
+                AND ch.{cfg['curah_hujan']['col_kelas']} IN ('2300-2400', '2400-2500', '2500-2600', '2600-2700', '2700-2800')
+                -- Slope: < 15% (classes '0-3%', '3-8%', '8-15%' in database)
+                AND k.{col_lereng} IN ('0-3%', '3-8%', '8-15%')
                 -- Zoning: Agriculture/Plantation
                 AND (pr.{cfg['pola_ruang']['col_zona']} ILIKE '%Pertanian%' OR pr.{cfg['pola_ruang']['col_zona']} ILIKE '%Perkebunan%')
             GROUP BY w.{cfg['wilayah']['col_nama']}
@@ -143,3 +143,59 @@ def get_rekomendasi():
     finally:
         if cur: cur.close()
         if conn: release_connection(conn)
+
+
+@router.get("/rekomendasi-optimal-geojson")
+def get_rekomendasi_optimal_geojson():
+    """Get the GeoJSON of all optimal recommendation areas (4 criteria)."""
+    conn = get_connection()
+    cur  = conn.cursor()
+    cfg = LAYER_CONFIG
+    table_lereng = cfg['kemiringan']['table']
+    col_lereng   = cfg['kemiringan']['col_kelas']
+
+    try:
+        cur.execute(f"""
+            SELECT json_build_object(
+                'type', 'FeatureCollection',
+                'features', COALESCE(json_agg(
+                    json_build_object(
+                        'type',     'Feature',
+                        'geometry', ST_AsGeoJSON(geom)::json,
+                        'properties', json_build_object(
+                            'keterangan', 'Lahan Rekomendasi Optimal'
+                        )
+                    )
+                ), '[]'::json)
+            )
+            FROM (
+                SELECT ST_CollectionExtract(
+                    ST_Intersection(
+                        ST_Intersection(
+                            ST_Intersection(jm.wkb_geometry, w.wkb_geometry),
+                            pr.wkb_geometry
+                        ),
+                        ST_Intersection(ch.wkb_geometry, k.wkb_geometry)
+                    ),
+                    3
+                ) AS geom
+                FROM {cfg['jambu_mete']['table']} jm
+                JOIN {cfg['wilayah']['table']} w ON ST_Intersects(jm.wkb_geometry, w.wkb_geometry)
+                JOIN {cfg['curah_hujan']['table']} ch ON ST_Intersects(jm.wkb_geometry, ch.wkb_geometry)
+                JOIN {table_lereng} k ON ST_Intersects(jm.wkb_geometry, k.wkb_geometry)
+                JOIN {cfg['pola_ruang']['table']} pr ON ST_Intersects(jm.wkb_geometry, pr.wkb_geometry)
+                WHERE
+                    (jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%S1%' OR jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%S2%')
+                    AND ch.{cfg['curah_hujan']['col_kelas']} IN ('2300-2400', '2400-2500', '2500-2600', '2600-2700', '2700-2800')
+                    AND k.{col_lereng} IN ('0-3%', '3-8%', '8-15%')
+                    AND (pr.{cfg['pola_ruang']['col_zona']} ILIKE '%Pertanian%' OR pr.{cfg['pola_ruang']['col_zona']} ILIKE '%Perkebunan%')
+            ) as subquery
+            WHERE NOT ST_IsEmpty(geom);
+        """)
+        result = cur.fetchone()[0]
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error di rekomendasi-optimal-geojson: {str(e)}")
+    finally:
+        if cur: cur.close()
+        if conn: release_connection(conn)

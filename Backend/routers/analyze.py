@@ -121,11 +121,11 @@ def analyze_polygon(body: AnalyzeRequest):
                 },
                 "hujan": {
                     "label": "Curah Hujan", "actual": format_label(actual[1]), 
-                    "requirement": "Sdng-Tinggi", "status": check_match(actual[1], ["Sedang", "Tinggi"])
+                    "requirement": "Sdng-Tinggi", "status": check_match(actual[1], ["2300-2400", "2400-2500", "2500-2600", "2600-2700", "2700-2800"])
                 },
                 "lereng": {
                     "label": "Kemiringan", "actual": actual[2] or "N/A", 
-                    "requirement": "< 15% (0-15)", "status": check_match(actual[2], ["0-8", "8-15"])
+                    "requirement": "< 15% (0-15)", "status": check_match(actual[2], ["0-3", "3-8", "8-15"])
                 },
                 "pola_ruang": {
                     "label": "Pola Ruang", "actual": actual[3] or "N/A", 
@@ -136,15 +136,15 @@ def analyze_polygon(body: AnalyzeRequest):
             # Hitung Luas Optimal & Ambil Geometri (GeoJSON) untuk visualisasi peta
             cur.execute(f"""
                 WITH raw_result AS (
-                    SELECT ST_CollectionExtract(ST_Intersection(ST_Intersection(ST_Intersection(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(ch.wkb_geometry)), ST_Intersection(ST_MakeValid(k.wkb_geometry), ST_MakeValid(pr.wkb_geometry))), ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), 3) AS geom
+                    SELECT ST_CollectionExtract(ST_Intersection(ST_Intersection(ST_Intersection(jm.wkb_geometry, ch.wkb_geometry), ST_Intersection(k.wkb_geometry, pr.wkb_geometry)), ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), 3) AS geom
                     FROM {cfg['jambu_mete']['table']} jm
                     JOIN {cfg['curah_hujan']['table']} ch ON ST_Intersects(jm.wkb_geometry, ch.wkb_geometry)
                     JOIN {cfg['kemiringan']['table']} k   ON ST_Intersects(jm.wkb_geometry, k.wkb_geometry)
                     JOIN {cfg['pola_ruang']['table']} pr  ON ST_Intersects(jm.wkb_geometry, pr.wkb_geometry)
                     WHERE ST_Intersects(jm.wkb_geometry, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))
                         AND (jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%%S1%%' OR jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%%S2%%')
-                        AND (ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%%Sedang%%' OR ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%%Tinggi%%')
-                        AND (k.{cfg['kemiringan']['col_kelas']} ILIKE '%%0-8%%' OR k.{cfg['kemiringan']['col_kelas']} ILIKE '%%8-15%%')
+                        AND ch.{cfg['curah_hujan']['col_kelas']} IN ('2300-2400', '2400-2500', '2500-2600', '2600-2700', '2700-2800')
+                        AND k.{cfg['kemiringan']['col_kelas']} IN ('0-3%%', '3-8%%', '8-15%%')
                         AND (pr.{cfg['pola_ruang']['col_zona']} ILIKE '%%Pertanian%%' OR pr.{cfg['pola_ruang']['col_zona']} ILIKE '%%Perkebunan%%')
                 )
                 SELECT 
@@ -213,7 +213,7 @@ def analyze_polygon(body: AnalyzeRequest):
 @router.post("/analyze/csv")
 def export_analysis_csv(body: AnalyzeRequest):
     """
-    Mengekspor hasil analisis poligon ke format CSV.
+    Mengekspor hasil analisis poligon ke format CSV dengan ringkasan kriteria lengkap.
     """
     geojson_str = json.dumps(body.polygon)
     conn = get_connection()
@@ -221,7 +221,7 @@ def export_analysis_csv(body: AnalyzeRequest):
     cfg = LAYER_CONFIG
 
     try:
-        # Ambil data Jambu Mete
+        # 1. Ambil data Jambu Mete
         cur.execute(f"""
             SELECT jm.{cfg['jambu_mete']['col_kelas']}, 
                    ROUND(CAST(SUM(ST_Area(ST_Intersection(jm.wkb_geometry, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))::geography)) / 10000 AS numeric), 2)
@@ -231,31 +231,81 @@ def export_analysis_csv(body: AnalyzeRequest):
         """, (geojson_str, geojson_str))
         res_mete = cur.fetchall()
 
-        # Ambil data Rekomendasi Optimal
+        # 2. Ambil data Rekomendasi Optimal
         cur.execute(f"""
-            SELECT ROUND(CAST(SUM(ST_Area(ST_Intersection(ST_Intersection(ST_Intersection(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(ch.wkb_geometry)), ST_Intersection(ST_MakeValid(k.wkb_geometry), ST_MakeValid(pr.wkb_geometry))), ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))::geography)) / 10000 AS numeric), 2)
+            SELECT ROUND(CAST(SUM(ST_Area(ST_Intersection(ST_Intersection(ST_Intersection(jm.wkb_geometry, ch.wkb_geometry), ST_Intersection(k.wkb_geometry, pr.wkb_geometry)), ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))::geography)) / 10000 AS numeric), 2)
             FROM {cfg['jambu_mete']['table']} jm
             JOIN {cfg['curah_hujan']['table']} ch ON ST_Intersects(jm.wkb_geometry, ch.wkb_geometry)
             JOIN {cfg['kemiringan']['table']} k   ON ST_Intersects(jm.wkb_geometry, k.wkb_geometry)
             JOIN {cfg['pola_ruang']['table']} pr  ON ST_Intersects(jm.wkb_geometry, pr.wkb_geometry)
             WHERE ST_Intersects(jm.wkb_geometry, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))
             AND (jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%%S1%%' OR jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%%S2%%')
-            AND (ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%%Sedang%%' OR ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%%Tinggi%%')
-            AND (k.{cfg['kemiringan']['col_kelas']} ILIKE '%%0-8%%' OR k.{cfg['kemiringan']['col_kelas']} ILIKE '%%8-15%%')
+            AND ch.{cfg['curah_hujan']['col_kelas']} IN ('2300-2400', '2400-2500', '2500-2600', '2600-2700', '2700-2800')
+            AND k.{cfg['kemiringan']['col_kelas']} IN ('0-3%%', '3-8%%', '8-15%%')
             AND (pr.{cfg['pola_ruang']['col_zona']} ILIKE '%%Pertanian%%' OR pr.{cfg['pola_ruang']['col_zona']} ILIKE '%%Perkebunan%%');
         """, (geojson_str, geojson_str))
         res_opt = cur.fetchone()
+        luas_opt = float(res_opt[0]) if res_opt and res_opt[0] else 0.0
+
+        # 3. Ambil data kriteria aktual
+        poly_query = "ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))"
+        cur.execute(f"""
+            SELECT 
+                (SELECT string_agg(DISTINCT jm.{cfg['jambu_mete']['col_kelas']}, ', ') FROM {cfg['jambu_mete']['table']} jm WHERE ST_Intersects(jm.wkb_geometry, {poly_query})),
+                (SELECT string_agg(DISTINCT ch.{cfg['curah_hujan']['col_kelas']}, ', ') FROM {cfg['curah_hujan']['table']} ch WHERE ST_Intersects(ch.wkb_geometry, {poly_query})),
+                (SELECT string_agg(DISTINCT k.{cfg['kemiringan']['col_kelas']}, ', ') FROM {cfg['kemiringan']['table']} k WHERE ST_Intersects(k.wkb_geometry, {poly_query})),
+                (SELECT string_agg(DISTINCT pr.{cfg['pola_ruang']['col_zona']}, ', ') FROM {cfg['pola_ruang']['table']} pr WHERE ST_Intersects(pr.wkb_geometry, {poly_query}))
+        """, (geojson_str, geojson_str, geojson_str, geojson_str))
+        actual = cur.fetchone()
+
+        def format_label(val):
+            if not val: return "N/A"
+            v = val.strip().upper()
+            return "TS" if v == "N" else v
+
+        def check_match(val, keywords):
+            if not val: return False
+            return any(k.lower() in val.lower() for k in keywords)
+
+        kesesuaian_act = format_label(actual[0])
+        kesesuaian_status = "SUAI" if check_match(actual[0], ["S1", "S2"]) else "TIDAK SUAI"
+
+        hujan_act = format_label(actual[1])
+        hujan_status = "SUAI" if check_match(actual[1], ["2300-2400", "2400-2500", "2500-2600", "2600-2700", "2700-2800"]) else "TIDAK SUAI"
+
+        lereng_act = actual[2] or "N/A"
+        lereng_status = "SUAI" if check_match(actual[2], ["0-3", "3-8", "8-15"]) else "TIDAK SUAI"
+
+        pr_act = actual[3] or "N/A"
+        pr_status = "SUAI" if check_match(actual[3], ["Pertanian", "Perkebunan"]) else "TIDAK SUAI"
 
         # Membuat file CSV di dalam memory
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["Kategori", "Kelas/Kriteria", "Luas (Hektar)"])
+        writer.writerow(["Kategori", "Kelas / Kriteria", "Nilai / Luas", "Status"])
         
+        # Tulis data kesesuaian jambu mete
         for row in res_mete:
-            writer.writerow(["Kesesuaian Jambu Mete", row[0], row[1]])
+            writer.writerow(["Kesesuaian Jambu Mete", row[0], f"{row[1]} Ha", ""])
         
-        if res_opt and res_opt[0]:
-            writer.writerow(["Rekomendasi Optimal", "Total Lahan Optimal", res_opt[0]])
+        # Tulis Rekomendasi Optimal
+        total_luas_drawn = sum(float(row[1]) for row in res_mete)
+        pct = (luas_opt / total_luas_drawn * 100) if total_luas_drawn > 0 else 0.0
+        
+        if luas_opt == 0:
+            status_rekomendasi = "POTENSI RENDAH (TIDAK DIREKOMENDASIKAN)"
+        elif pct >= 50.0:
+            status_rekomendasi = "REKOMENDASI OPTIMAL (POTENSI TINGGI)"
+        else:
+            status_rekomendasi = "POTENSI TERBATAS (PERLU PENINGKATAN)"
+            
+        writer.writerow(["Rekomendasi Optimal", "Total Lahan Optimal", f"{luas_opt} Ha ({pct:.1f}%)", status_rekomendasi])
+
+        # Tulis Ringkasan Kriteria
+        writer.writerow(["Ringkasan Kriteria", "Kesesuaian Lahan (S1 atau S2)", kesesuaian_act, kesesuaian_status])
+        writer.writerow(["Ringkasan Kriteria", "Curah Hujan (Sedang-Tinggi)", hujan_act, hujan_status])
+        writer.writerow(["Ringkasan Kriteria", "Kemiringan Lereng (< 15%)", lereng_act, lereng_status])
+        writer.writerow(["Ringkasan Kriteria", "Pola Ruang (Pertanian)", pr_act, pr_status])
 
         output.seek(0)
         return StreamingResponse(
@@ -283,15 +333,15 @@ def export_analysis_shp(body: AnalyzeRequest):
     try:
         # Ambil geometri irisan hasil rekomendasi
         cur.execute(f"""
-            SELECT ST_AsGeoJSON(ST_CollectionExtract(ST_Intersection(ST_Intersection(ST_Intersection(ST_MakeValid(jm.wkb_geometry), ST_MakeValid(ch.wkb_geometry)), ST_Intersection(ST_MakeValid(k.wkb_geometry), ST_MakeValid(pr.wkb_geometry))), ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), 3))
+            SELECT ST_AsGeoJSON(ST_CollectionExtract(ST_Intersection(ST_Intersection(ST_Intersection(jm.wkb_geometry, ch.wkb_geometry), ST_Intersection(k.wkb_geometry, pr.wkb_geometry)), ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), 3))
             FROM {cfg['jambu_mete']['table']} jm
             JOIN {cfg['curah_hujan']['table']} ch ON ST_Intersects(jm.wkb_geometry, ch.wkb_geometry)
             JOIN {cfg['kemiringan']['table']} k ON ST_Intersects(jm.wkb_geometry, k.wkb_geometry)
             JOIN {cfg['pola_ruang']['table']} pr ON ST_Intersects(jm.wkb_geometry, pr.wkb_geometry)
             WHERE ST_Intersects(jm.wkb_geometry, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))
             AND (jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%%S1%%' OR jm.{cfg['jambu_mete']['col_kelas']} ILIKE '%%S2%%')
-            AND (ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%%Sedang%%' OR ch.{cfg['curah_hujan']['col_kelas']} ILIKE '%%Tinggi%%')
-            AND (k.{cfg['kemiringan']['col_kelas']} ILIKE '%%0-8%%' OR k.{cfg['kemiringan']['col_kelas']} ILIKE '%%8-15%%')
+            AND ch.{cfg['curah_hujan']['col_kelas']} IN ('2300-2400', '2400-2500', '2500-2600', '2600-2700', '2700-2800')
+            AND k.{cfg['kemiringan']['col_kelas']} IN ('0-3%%', '3-8%%', '8-15%%')
             AND (pr.{cfg['pola_ruang']['col_zona']} ILIKE '%%Pertanian%%' OR pr.{cfg['pola_ruang']['col_zona']} ILIKE '%%Perkebunan%%');
         """, (geojson_str, geojson_str))
         

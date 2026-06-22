@@ -101,6 +101,12 @@ body, html, #app-container {
     border-color: #e74c3c;
 }
 
+.status-warning {
+    background: rgba(243, 156, 18, 0.2);
+    color: #f5b041;
+    border-color: #f39c12;
+}
+
 table.analysis-table {
     width: 100%;
     border-collapse: collapse;
