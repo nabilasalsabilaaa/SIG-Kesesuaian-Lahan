@@ -27,7 +27,6 @@ def get_layer_geojson(nama_layer: str):
 
     table = LAYER_CONFIG[nama_layer]["table"]
     
-    # Adjust table name if needed
     if table == "kemiringan":
         table = "kemiringan"
 

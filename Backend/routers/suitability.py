@@ -14,7 +14,6 @@ def get_suitability(
     conn = get_connection()
     cur  = conn.cursor()
 
-    # Query point data from spatial layer
     def query_point(table: str, col: str) -> str:
         try:
             cur.execute(f"""
@@ -32,7 +31,6 @@ def get_suitability(
                 return "TS" if val == "N" else val
             return "Tidak ada data"
         except Exception:
-            # Skip if table has issues
             return "Tidak tersedia"
 
     try:

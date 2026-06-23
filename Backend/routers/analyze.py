@@ -38,7 +38,7 @@ def analyze_polygon(body: AnalyzeRequest):
         try:
             cur.execute("""
                 SELECT
-                    kl.suai_lahan AS kelas,  -- Disesuaikan jika nanti strukturnya mirip jambu_mete
+                    kl.suai_lahan AS kelas,  
                     ROUND(
                         CAST(
                             SUM(ST_Area(
@@ -59,14 +59,13 @@ def analyze_polygon(body: AnalyzeRequest):
             """, (geojson_str, geojson_str))
             rows_kesesuaian = cur.fetchall()
         except Exception:
-            # Skip jika tabel tidak ada
             conn.rollback() 
             rows_kesesuaian = []
 
-        # --- QUERY 2: JAMBU METE (Sudah diperbaiki total sesuai database asli)
+        # Query 2: Jambu Mete 
         cur.execute("""
             SELECT
-                jm.suai_lahan AS kelas,  -- Kolom ke-13 asli di pgAdmin kamu ('suai_lahan')
+                jm.suai_lahan AS kelas, 
                 ROUND(
                     CAST(
                         SUM(ST_Area(
@@ -77,7 +76,7 @@ def analyze_polygon(body: AnalyzeRequest):
                         )) / 10000
                     AS numeric), 2
                 ) AS luas_ha
-            FROM jambu_mete jm          -- Nama tabel asli di pgAdmin kamu ('jambu_mete')
+            FROM jambu_mete jm          
             WHERE ST_Intersects(
                 jm.wkb_geometry,
                 ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)
@@ -87,11 +86,10 @@ def analyze_polygon(body: AnalyzeRequest):
         """, (geojson_str, geojson_str))
         rows_mete = cur.fetchall()
 
-        # --- QUERY 3: ANALISIS REKOMENDASI OPTIMAL (4 KRITERIA) ---
+        # Query 3: Rekomendasi optimal
         # Mencari irisan lahan yang: Jambu Mete S1/S2, Hujan Sedang/Tinggi, Lereng <15%, Pola Ruang Pertanian
         try:
-            # 1. Ambil data aktual yang ditemukan di dalam poligon untuk tabel perbandingan
-            # Gunakan ST_MakeValid pada input GeoJSON untuk mencegah error pada poligon yang tidak valid
+            # Ambil data aktual yang ditemukan di dalam poligon untuk tabel perbandingan
             poly_query = "ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))"
             cur.execute(f"""
                 SELECT 
@@ -114,7 +112,7 @@ def analyze_polygon(body: AnalyzeRequest):
                 if not val: return False
                 return any(k.lower() in val.lower() for k in keywords)
 
-            # 2. Susun ringkasan kriteria (Key ini harus lengkap agar map.js bisa menampilkan tabel)
+            # Susun ringkasan kriteria 
             kriteria_summary = {
                 "kesesuaian": {
                     "label": "Kesesuaian", 
@@ -161,8 +159,7 @@ def analyze_polygon(body: AnalyzeRequest):
                 luas_rekomendasi = float(res_rec[0]) if res_rec[0] else 0.0
                 rekomendasi_geojson = res_rec[1]
 
-            # NEW QUERY: JAMBU METE CLASS DISTRIBUTION WITHIN RECOMMENDED AREA
-            if rekomendasi_geojson: # Only query if there's a recommended area
+            if rekomendasi_geojson: 
                 cur.execute(f"""
                     SELECT
                         jm.suai_lahan AS kelas,
@@ -171,7 +168,7 @@ def analyze_polygon(body: AnalyzeRequest):
                                 SUM(ST_Area(
                                     ST_Intersection(
                                         jm.wkb_geometry,
-                                        ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326) -- Use the calculated rekomendasi_geojson here
+                                        ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)
                                     )::geography
                                 )) / 10000
                             AS numeric), 2
@@ -198,7 +195,7 @@ def analyze_polygon(body: AnalyzeRequest):
             "jambu_mete": [
                 {"kelas": r[0] if r[0] else "Tidak Diketahui", "luas_ha": float(r[1])} for r in rows_mete
             ],
-            "jambu_mete_rekomendasi": [ # New field in response
+            "jambu_mete_rekomendasi": [ 
                 {"kelas": r[0] if r[0] else "Tidak Diketahui", "luas_ha": float(r[1])} for r in rows_mete_rekomendasi
             ],
             "rekomendasi_optimal_ha": luas_rekomendasi,
@@ -215,7 +212,7 @@ def analyze_polygon(body: AnalyzeRequest):
 @router.post("/analyze/csv")
 def export_analysis_csv(body: AnalyzeRequest):
     """
-    Mengekspor hasil analisis poligon ke format CSV dengan ringkasan kriteria lengkap.
+    Mengekspor hasil analisis poligon ke format CSV 
     """
     geojson_str = json.dumps(body.polygon)
     conn = get_connection()
@@ -223,7 +220,7 @@ def export_analysis_csv(body: AnalyzeRequest):
     cfg = LAYER_CONFIG
 
     try:
-        # 1. Ambil data Jambu Mete
+        # Ambil data Jambu Mete
         cur.execute(f"""
             SELECT jm.{cfg['jambu_mete']['col_kelas']}, 
                    ROUND(CAST(SUM(ST_Area(ST_Intersection(jm.wkb_geometry, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))::geography)) / 10000 AS numeric), 2)
@@ -233,7 +230,7 @@ def export_analysis_csv(body: AnalyzeRequest):
         """, (geojson_str, geojson_str))
         res_mete = cur.fetchall()
 
-        # 2. Ambil data Rekomendasi Optimal
+        # Ambil data Rekomendasi Optimal
         cur.execute(f"""
             SELECT ROUND(CAST(SUM(ST_Area(ST_Intersection(ST_Intersection(ST_Intersection(jm.wkb_geometry, ch.wkb_geometry), ST_Intersection(k.wkb_geometry, pr.wkb_geometry)), ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))::geography)) / 10000 AS numeric), 2)
             FROM {cfg['jambu_mete']['table']} jm
@@ -249,7 +246,7 @@ def export_analysis_csv(body: AnalyzeRequest):
         res_opt = cur.fetchone()
         luas_opt = float(res_opt[0]) if res_opt and res_opt[0] else 0.0
 
-        # 3. Ambil data kriteria aktual
+        # Ambil data kriteria aktual
         poly_query = "ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))"
         cur.execute(f"""
             SELECT 
@@ -281,16 +278,16 @@ def export_analysis_csv(body: AnalyzeRequest):
         pr_act = actual[3] or "N/A"
         pr_status = "SUAI" if check_match(actual[3], ["Pertanian", "Perkebunan"]) else "TIDAK SUAI"
 
-        # Membuat file CSV di dalam memory
+        # Membuat file CSV 
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["Kategori", "Kelas / Kriteria", "Nilai / Luas", "Status"])
         
-        # Tulis data kesesuaian jambu mete
+        # Write data kesesuaian jambu mete
         for row in res_mete:
             writer.writerow(["Kesesuaian Jambu Mete", row[0], f"{row[1]} Ha", ""])
         
-        # Tulis Rekomendasi Optimal
+        # Write Rekomendasi Optimal
         total_luas_drawn = sum(float(row[1]) for row in res_mete)
         pct = (luas_opt / total_luas_drawn * 100) if total_luas_drawn > 0 else 0.0
         
@@ -303,7 +300,7 @@ def export_analysis_csv(body: AnalyzeRequest):
             
         writer.writerow(["Rekomendasi Optimal", "Total Lahan Optimal", f"{luas_opt} Ha ({pct:.1f}%)", status_rekomendasi])
 
-        # Tulis Ringkasan Kriteria
+        # Write Ringkasan Kriteria
         writer.writerow(["Ringkasan Kriteria", "Kesesuaian Lahan (S1 atau S2)", kesesuaian_act, kesesuaian_status])
         writer.writerow(["Ringkasan Kriteria", "Curah Hujan (Sedang-Tinggi)", hujan_act, hujan_status])
         writer.writerow(["Ringkasan Kriteria", "Kemiringan Lereng (< 15%)", lereng_act, lereng_status])
@@ -382,7 +379,7 @@ def export_analysis_shp(body: AnalyzeRequest):
 
     except Exception as e:
         import traceback
-        traceback.print_exc() # Cetak traceback lengkap ke konsol backend
+        traceback.print_exc() 
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur: cur.close()

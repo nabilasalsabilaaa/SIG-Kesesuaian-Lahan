@@ -76,7 +76,6 @@ def get_rekomendasi():
     cur  = conn.cursor()
 
     cfg = LAYER_CONFIG
-    # Slope table configuration
     table_lereng = cfg['kemiringan']['table']
     col_lereng   = cfg['kemiringan']['col_kelas']
 
@@ -198,4 +197,4 @@ def get_rekomendasi_optimal_geojson():
         raise HTTPException(status_code=500, detail=f"Error di rekomendasi-optimal-geojson: {str(e)}")
     finally:
         if cur: cur.close()
-        if conn: release_connection(conn)
+        if conn: release_connection(conn)

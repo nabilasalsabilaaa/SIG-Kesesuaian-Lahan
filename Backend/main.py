@@ -20,7 +20,6 @@ app.include_router(suitability.router, prefix="/api", tags=["Suitability"])
 app.include_router(analyze.router,     prefix="/api", tags=["Analyze"])
 app.include_router(rekomendasi.router, prefix="/api", tags=["Rekomendasi"])
 
-# Suppress Chrome DevTools 404 errors
 @app.get("/.well-known/appspecific/com.chrome.devtools.json", include_in_schema=False)
 def devtools_json():
     return JSONResponse(content={})
