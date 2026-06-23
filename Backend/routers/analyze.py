@@ -105,8 +105,10 @@ def analyze_polygon(body: AnalyzeRequest):
             
             def format_label(val):
                 if not val: return "N/A"
-                v = val.strip().upper()
-                return "TS" if v == "N" else v
+                parts = [p.strip() for p in val.split(',')]
+                parts = ["TS" if p.upper() in ["N", "NON"] else ("Tidak Teridentifikasi" if p == "-" else p) for p in parts]
+                return ", ".join(parts)
+
 
             def check_match(val, keywords):
                 if not val: return False

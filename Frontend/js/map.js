@@ -75,8 +75,8 @@ function loadLayer(layerName, layerGroup, popupField, popupLabel) {
     const url = layerName === 'overlay-rekomendasi'
         ? `${API_BASE_URL}/overlay-rekomendasi`
         : layerName === 'rekomendasi-optimal'
-        ? `${API_BASE_URL}/rekomendasi-optimal-geojson`
-        : `${API_BASE_URL}/layer/${layerName}/geojson`;
+            ? `${API_BASE_URL}/rekomendasi-optimal-geojson`
+            : `${API_BASE_URL}/layer/${layerName}/geojson`;
 
     fetch(url)
         .then(res => {
@@ -139,15 +139,13 @@ const overlayMaps = {
     "Rekomendasi Lahan Optimal (4 Kriteria)": layerRekomendasiOptimal
 };
 
-// =========================================================================
-// 8. Menambahkan Legenda Statis di Pojok Kanan Bawah (Sekarang diatur di bottomleft)
-// =========================================================================
+// 8. Menambahkan Legenda Statis di Pojok Kanan Bawah 
 const legend = L.control({ position: 'bottomleft' });
 legend.onAdd = function (map) {
     const div = L.DomUtil.create('div', 'info legend');
     div.style.padding = '8px';
     div.style.border = 'none';
-    div.style.marginBottom = '5px'; // Memberi sedikit jarak dengan kontrol layer di bawahnya
+    div.style.marginBottom = '5px';
 
     const grades = ['S1', 'S2', 'S3', 'TS'];
     const labels = ['Sangat Sesuai', 'Cukup Sesuai', 'Sesuai Bersyarat', 'Tidak Sesuai'];
@@ -163,23 +161,18 @@ legend.onAdd = function (map) {
 // Tambahkan legenda terlebih dahulu
 legend.addTo(map);
 
-// =========================================================================
-// 5. Membuat Kontrol Layer (Checkbox)
-// =========================================================================
+// 5. Kontrol Layer (Checkbox)
 const layerControl = L.control.layers(baseMaps, overlayMaps, {
     collapsed: false,
     position: 'bottomleft'
 }).addTo(map);
 
-// --- SOLUSI AMPUH VIA MANIPULASI DOM ---
-// Kita ambil container pembungkus kontrol layer, lalu paksa posisinya berada di bawah legenda
 const layerControlContainer = layerControl.getContainer();
 if (layerControlContainer) {
-    // Memberikan margin atas agar tidak menempel, dan memastikan urutan visualnya di bawah
     layerControlContainer.style.marginTop = '10px';
     const parent = layerControlContainer.parentNode;
     if (parent && parent.lastChild !== layerControlContainer) {
-        parent.appendChild(layerControlContainer); // Memindahkan kontrol layer ke tumpukan paling bawah
+        parent.appendChild(layerControlContainer);
     }
 }
 
@@ -195,8 +188,7 @@ map.pm.addControls({
     cutPolygon: false, editMode: true, removalMode: true
 });
 
-// Fungsi untuk buka/tutup sidebar
-// Fungsi untuk buka/tutup sidebar
+// Fungsi buka/tutup sidebar
 window.toggleSidebar = function () {
     const sidebar = document.querySelector('.glass-maroon');
     sidebar.classList.toggle('sidebar-collapsed');
@@ -217,7 +209,7 @@ map.on('pm:create', function (e) {
     const resultContent = document.getElementById('analysis-result-content');
     const placeholder = document.getElementById('analysis-placeholder');
 
-    // Pastikan sidebar terbuka saat analisis dimulai
+    // sidebar terbuka saat analisis dimulai
     const sidebar = document.querySelector('.glass-maroon');
     if (sidebar.classList.contains('sidebar-collapsed')) {
         window.toggleSidebar();
@@ -248,7 +240,7 @@ map.on('pm:create', function (e) {
         });
 });
 
-// Fungsi Baru: Update Sidebar daripada Popup
+// Update sidebar
 function updateSidebarUI(data, drawnGeoJSON, layer) {
     const resultContent = document.getElementById('analysis-result-content');
 
@@ -319,7 +311,18 @@ function updateSidebarUI(data, drawnGeoJSON, layer) {
             <tbody>`;
 
     Object.values(data.kriteria_summary).forEach(item => {
-        let displayActual = item.actual === 'N' ? 'TS' : item.actual;
+        let displayActual = item.actual;
+        if (typeof displayActual === 'string') {
+            displayActual = displayActual.split(',')
+                .map(p => {
+                    const trimmed = p.trim();
+                    if (trimmed === 'N' || trimmed === 'Non') return 'TS';
+                    if (trimmed === '-') return 'Tidak Teridentifikasi';
+                    return trimmed;
+                })
+                .join(', ');
+        }
+
         html += `<tr>
             <td>${item.label}</td>
             <td>${item.requirement}</td>
@@ -477,6 +480,12 @@ map.on('click', function (e) {
                 map.removeLayer(window.currentRecommendationLayer);
                 window.currentRecommendationLayer = null;
             }
+            const kelasJambuMete = (d.kelas_jambu_mete === 'N' || d.kelas_jambu_mete === 'Non') 
+                ? 'TS' 
+                : (d.kelas_jambu_mete === '-') 
+                ? 'Tidak Teridentifikasi' 
+                : d.kelas_jambu_mete;
+
             let info = `
                 <div style="min-width:200px;">
                     <b>Info Lokasi</b><hr>
@@ -485,7 +494,7 @@ map.on('click', function (e) {
                         ${generateInfoRow('Curah Hujan', d.curah_hujan.kelas)}
                         ${generateInfoRow('Kemiringan', d.kemiringan)}
                         ${generateInfoRow('Pola Ruang', d.zona_pola_ruang)}
-                        ${generateInfoRow('Kesesuaian', `<span style="color:${getKesesuaianColor(d.kelas_jambu_mete)}; font-weight:bold;">${d.kelas_jambu_mete}</span>`)}
+                        ${generateInfoRow('Kesesuaian', `<span style="color:${getKesesuaianColor(kelasJambuMete)}; font-weight:bold;">${kelasJambuMete}</span>`)}
                     </table>
                 </div>`;
 
